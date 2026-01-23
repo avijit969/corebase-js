@@ -1,5 +1,5 @@
 import { AuthClient } from './auth';
-import { PostgrestQueryBuilder } from './query';
+import { QueryBuilder } from './query';
 import { ClientConfig } from './types';
 
 export class CoreBaseClient {
@@ -17,8 +17,8 @@ export class CoreBaseClient {
         this.auth = new AuthClient(config);
     }
 
-    from<T = any>(table: string): PostgrestQueryBuilder<T> {
-        return new PostgrestQueryBuilder<T>(
+    from<T = any>(table: string): QueryBuilder<T> {
+        return new QueryBuilder<T>(
             (path, options) => this.auth.request(path, options),
             table
         );

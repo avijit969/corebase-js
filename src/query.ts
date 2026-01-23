@@ -2,33 +2,33 @@ import { ClientResponse } from './types';
 
 export type RequestHandler = <T>(path: string, options?: RequestInit) => Promise<ClientResponse<T>>;
 
-export class PostgrestQueryBuilder<T = any> {
+export class QueryBuilder<T = any> {
     constructor(
         private request: RequestHandler,
         private tableName: string
     ) { }
 
-    select(columns = '*'): PostgrestFilterBuilder<T> {
-        return new PostgrestSelectBuilder<T>(this.request, this.tableName, columns);
+    select(columns = '*'): SelectBuilder<T> {
+        return new SelectBuilder<T>(this.request, this.tableName, columns);
     }
 
-    async insert(values: Partial<T> | Partial<T>[]): Promise<ClientResponse<any>> {
-        return this.request(`/table_operation/insert/${this.tableName}`, {
+    async insert(values: Partial<T> | Partial<T>[]): Promise<ClientResponse<{ message: string; count: number }>> {
+        return this.request(`/table_operation/insert/${encodeURIComponent(this.tableName)}`, {
             method: 'POST',
             body: JSON.stringify(values),
         });
     }
 
-    update(values: Partial<T>): PostgrestFilterBuilder<any> {
-        return new PostgrestFilterBuilder(this.request, this.tableName, 'UPDATE', values);
+    update(values: Partial<T>): FilterBuilder<any> {
+        return new FilterBuilder(this.request, this.tableName, 'UPDATE', values);
     }
 
-    delete(): PostgrestFilterBuilder<any> {
-        return new PostgrestFilterBuilder(this.request, this.tableName, 'DELETE');
+    delete(): FilterBuilder<any> {
+        return new FilterBuilder(this.request, this.tableName, 'DELETE');
     }
 }
 
-export class PostgrestFilterBuilder<T> implements PromiseLike<ClientResponse<T>> {
+export class FilterBuilder<T> implements PromiseLike<ClientResponse<T>> {
     protected filters: Record<string, any> = {};
 
     constructor(
@@ -44,6 +44,11 @@ export class PostgrestFilterBuilder<T> implements PromiseLike<ClientResponse<T>>
         return this;
     }
 
+    match(query: Record<string, any>): this {
+        Object.assign(this.filters, query);
+        return this;
+    }
+
     then<TResult1 = ClientResponse<T>, TResult2 = never>(
         onfulfilled?: ((value: ClientResponse<T>) => TResult1 | PromiseLike<TResult1>) | null,
         onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null
@@ -56,12 +61,12 @@ export class PostgrestFilterBuilder<T> implements PromiseLike<ClientResponse<T>>
             throw new Error("Execute should be called on SelectBuilder");
         }
 
-        const path = `/table_operation/${this.method.toLowerCase()}/${this.tableName}`;
+        const path = `/table_operation/${this.method.toLowerCase()}/${encodeURIComponent(this.tableName)}`;
         let payload: any = {};
 
         if (this.method === 'UPDATE') {
             payload = {
-                updates: this.body, // 'updates' key as per API docs
+                updates: this.body,
                 where: this.filters
             };
             return this.request(path, { method: 'PUT', body: JSON.stringify(payload) });
@@ -76,11 +81,12 @@ export class PostgrestFilterBuilder<T> implements PromiseLike<ClientResponse<T>>
     }
 }
 
-export class PostgrestSelectBuilder<T> extends PostgrestFilterBuilder<T> {
+export class SelectBuilder<T> extends FilterBuilder<T> {
     private _limit?: number;
     private _page?: number;
     private _sort?: string;
     private _order?: 'ASC' | 'DESC';
+    private _isSingle = false;
 
     constructor(request: RequestHandler, tableName: string, columns: string) {
         super(request, tableName, 'SELECT', undefined, columns);
@@ -104,6 +110,7 @@ export class PostgrestSelectBuilder<T> extends PostgrestFilterBuilder<T> {
 
     single(): this {
         this._limit = 1;
+        this._isSingle = true;
         return this;
     }
 
@@ -117,18 +124,27 @@ export class PostgrestSelectBuilder<T> extends PostgrestFilterBuilder<T> {
             order: this._order
         };
 
-        const response = await this.request<any>(`/table_operation/select/${this.tableName}`, {
+        const response = await this.request<any>(`/table_operation/select/${encodeURIComponent(this.tableName)}`, {
             method: 'POST',
             body: JSON.stringify(payload)
         });
 
         if (response.error) return { data: null, error: response.error };
 
-        const resultData = response.data?.data;
+        const resultData = response.data?.data; // Array of items
         const meta = response.data?.meta;
 
+        let finalData = resultData;
+        if (this._isSingle) {
+            if (Array.isArray(resultData) && resultData.length > 0) {
+                finalData = resultData[0];
+            } else {
+                finalData = null; // Or undefined? Supabase errors here usually.
+            }
+        }
+
         return {
-            data: resultData as any,
+            data: finalData as T,
             error: null,
             count: meta?.total
         };
