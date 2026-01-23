@@ -1,0 +1,25 @@
+{
+  "name": "corebase-js",
+  "version": "0.1.0",
+  "description": "JavaScript client for CoreBase",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "baas",
+    "corebase",
+    "sdk"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
