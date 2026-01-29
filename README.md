@@ -171,6 +171,32 @@ const { data, error } = await corebase
   .eq('id', 123);
 ```
 
+## File Storage
+
+Upload files to your project buckets.
+
+### Upload File
+
+Upload a file directly from the browser (e.g., from an `<input type="file" />`).
+
+```typescript
+// Assuming you have an input element: <input type="file" id="fileInput" />
+const fileInput = document.getElementById('fileInput') as HTMLInputElement;
+const file = fileInput.files?.[0];
+
+if (file) {
+  const { data, error } = await corebase.storage.upload(file);
+
+  if (error) {
+    console.error('Upload failed:', error);
+  } else {
+    console.log('File uploaded successfully!');
+    console.log('File Key:', data.key);
+    console.log('Upload URL:', data.url);
+  }
+}
+```
+
 ## TypeScript Support
 
 This library is written in TypeScript and exports types for all responses.

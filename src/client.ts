@@ -1,9 +1,11 @@
 import { AuthClient } from './auth';
 import { QueryBuilder } from './query';
+import { StorageClient } from './storage';
 import { ClientConfig } from './types';
 
 export class CoreBaseClient {
     public auth: AuthClient;
+    public storage: StorageClient;
     private config: ClientConfig;
 
     constructor(config: ClientConfig) {
@@ -15,6 +17,7 @@ export class CoreBaseClient {
         }
         this.config = config;
         this.auth = new AuthClient(config);
+        this.storage = new StorageClient(this.auth);
     }
 
     from<T = any>(table: string): QueryBuilder<T> {
