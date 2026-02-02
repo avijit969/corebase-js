@@ -1,9 +1,13 @@
 {
   "name": "corebase-js",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "JavaScript client for CoreBase",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./react": "./dist/react.js"
+  },
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build"
@@ -20,6 +24,16 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
+    "@types/react": "^19.2.10",
+    "react": "^19.2.4",
     "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "react": ">=16.8.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   }
 }

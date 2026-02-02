@@ -6,6 +6,9 @@ A robust JavaScript/TypeScript client for communicating with your CoreBase backe
 
 ```bash
 npm install corebase-js
+
+# If using React/React Native hooks (Optioanal peer dependency)
+npm install --save-dev react @types/react
 ```
 
 ## Initialization
@@ -195,6 +198,41 @@ if (file) {
     console.log('Upload URL:', data.url);
   }
 }
+```
+
+## Realtime Data (React / React Native)
+
+Subscribe to live data changes using the `useQuery` hook.
+
+```typescript
+import { useQuery } from 'corebase-js/react';
+
+// Define your query
+const query = {
+  from: 'posts',
+  select: ['id', 'title', 'likes'],
+  where: { 
+    status: 'published' 
+  }
+};
+
+const MyComponent = () => {
+  // Subscribe to realtime updates
+  const { data, loading, error } = useQuery(corebase, query);
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  return (
+    <ul>
+      {data.map(post => (
+        <li key={post.id}>
+          {post.title} ({post.likes} likes)
+        </li>
+      ))}
+    </ul>
+  );
+};
 ```
 
 ## TypeScript Support
