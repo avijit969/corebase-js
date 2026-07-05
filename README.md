@@ -75,6 +75,27 @@ Clear the current session.
 await corebase.auth.signOut();
 ```
 
+### OAuth (Google / GitHub)
+
+```typescript
+// Redirect the browser to start the flow
+window.location.href = corebase.auth.getOAuthUrl('google', projectId);
+
+// On your configured success page, read the tokens off the query string
+const params = new URLSearchParams(window.location.search);
+corebase.auth.setSessionFromTokens({
+  access_token: params.get('access_token')!,
+  refresh_token: params.get('refresh_token') ?? undefined,
+  user: { id: params.get('user_id')!, email: '' },
+});
+```
+
+### Refresh a Session
+
+```typescript
+const { data, error } = await corebase.auth.refreshSession();
+```
+
 ## specific Database Operations
 
 Perform CRUD operations on your tables using a fluent, chainable API.
@@ -188,7 +209,7 @@ const fileInput = document.getElementById('fileInput') as HTMLInputElement;
 const file = fileInput.files?.[0];
 
 if (file) {
-  const { data, error } = await corebase.storage.upload(file);
+  const { data, error } = await corebase.storage.upload(file, 'avatars');
 
   if (error) {
     console.error('Upload failed:', error);
@@ -200,20 +221,74 @@ if (file) {
 }
 ```
 
+### Buckets & Files
+
+```typescript
+await corebase.storage.createBucket({ name: 'avatars', public: true });
+const { data: buckets } = await corebase.storage.listBuckets();
+const { data: files } = await corebase.storage.listFiles({ bucket: 'avatars' });
+const { data: blob } = await corebase.storage.downloadFile(fileId);
+await corebase.storage.deleteFile(fileId);
+```
+
+## Database Schema Management
+
+For creating/altering tables, use `corebase.db` — `corebase.from()` is for row data.
+
+```typescript
+await corebase.db.createTable({
+  table: 'posts',
+  columns: [
+    { name: 'id', type: 'text', primary: true },
+    { name: 'title', type: 'text', notNull: true },
+  ],
+});
+
+const { data: tables } = await corebase.db.listTables();
+await corebase.db.addColumn('posts', { name: 'published', type: 'boolean' });
+```
+
+## Edge Functions
+
+```typescript
+const { data: fn } = await corebase.functions.create({
+  name: 'hello',
+  trigger_type: 'http',
+  code: 'export default { fetch: () => new Response("Hello!") }',
+});
+
+await corebase.functions.deploy(fn.function.id); // requires the Workers for Platforms add-on
+
+// invoke() returns a raw Fetch Response, not {data, error} — the gateway forwards
+// your deployed Worker's response byte-for-byte.
+const res = await corebase.functions.invoke('hello');
+console.log(await res.text());
+```
+
+## Cron Jobs & Custom Email
+
+```typescript
+await corebase.cron.create({ name: 'nightly-sync', cron_expression: '0 0 * * *', url: 'https://example.com/webhook' });
+
+await corebase.customEmail.create({ name: 'welcome', subject: 'Hi {{name}}', body: '...' });
+```
+
 ## Realtime Data (React / React Native)
 
-Subscribe to live data changes using the `useQuery` hook.
+Subscribe to live data changes using the `useQuery` hook. Rows are always scoped to the
+connected user automatically; on top of that, the query supports column selection,
+equality/operator filters, sorting, limiting, and joins.
 
 ```typescript
 import { useQuery } from 'corebase-js/react';
 
-// Define your query
 const query = {
   from: 'posts',
   select: ['id', 'title', 'likes'],
-  where: { 
-    status: 'published' 
-  }
+  where: { status: 'published', likes: { gt: 10 } },
+  orderBy: 'created_at',
+  order: 'DESC',
+  limit: 20,
 };
 
 const MyComponent = () => {
@@ -226,13 +301,35 @@ const MyComponent = () => {
   return (
     <ul>
       {data.map(post => (
-        <li key={post.id}>
-          {post.title} ({post.likes} likes)
-        </li>
+        <li key={post.id}>{post.title} ({post.likes} likes)</li>
       ))}
     </ul>
   );
 };
+```
+
+**Filter operators:** `eq`, `gt`, `lt`, `in` — e.g. `{ status: { in: ['draft', 'review'] } }`.
+Bare values (`{ status: 'published' }`) are treated as equality.
+
+**Joins** (up to 3 levels deep) attach related data under a nested key named after the
+joined table. Joined tables need their own explicit `select`:
+
+```typescript
+const query = {
+  from: 'products',
+  select: ['id', 'name', 'price', 'category_id'],
+  join: [
+    { table: 'categories', on: { 'products.category_id': 'categories.id' }, select: ['name'] },
+  ],
+};
+// => { id, name, price, category_id, categories: { name } }
+```
+
+Outside React, use the client directly:
+
+```typescript
+const subId = corebase.realtime.subscribe({ from: 'posts' }, (rows) => console.log(rows));
+corebase.realtime.unsubscribe(subId);
 ```
 
 ## TypeScript Support

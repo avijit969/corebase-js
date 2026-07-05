@@ -1,17 +1,3 @@
-export interface User {
-    id: string;
-    email: string;
-    name?: string;
-    role?: string;
-    created_at?: string;
-}
-
-export interface AuthSession {
-    access_token: string;
-    expires_in: number;
-    user: User;
-}
-
 export interface ApiResponse<T> {
     status: 'success' | 'error';
     data?: T;

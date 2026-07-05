@@ -4,3 +4,7 @@ export * from './auth';
 export * from './query';
 export * from './storage';
 export * from './realtime';
+export * from './db';
+export * from './cron';
+export * from './customEmail';
+export * from './functions';

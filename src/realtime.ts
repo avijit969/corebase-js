@@ -16,6 +16,24 @@ interface Subscription {
     callback: RealtimeCallback;
 }
 
+function decodeJwtPayload(token: string): Record<string, any> | null {
+    try {
+        const base64Url = token.split('.')[1];
+        let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        while (base64.length % 4 !== 0) base64 += '=';
+        const binary = atob(base64);
+        const json = decodeURIComponent(
+            binary.split('').map(c => {
+                const hex = c.charCodeAt(0).toString(16);
+                return '%' + (hex.length === 1 ? '0' + hex : hex);
+            }).join('')
+        );
+        return JSON.parse(json);
+    } catch {
+        return null;
+    }
+}
+
 export class RealtimeClient {
     private ws: WebSocket | null = null;
     private subscriptions = new Map<string, Subscription>();
@@ -23,21 +41,55 @@ export class RealtimeClient {
     private config: ClientConfig;
     private auth: AuthClient;
     private isConnected = false;
+    private manualDisconnect = false;
 
     constructor(config: ClientConfig, auth: AuthClient) {
         this.config = config;
         this.auth = auth;
     }
 
-    private getUrl() {
+    /** The project id is read from the current session's access token (`project_id` claim). */
+    private getProjectId(): string | null {
+        const token = this.auth.getSession()?.access_token;
+        if (!token) return null;
+        const payload = decodeJwtPayload(token);
+        return (payload?.project_id as string) || null;
+    }
+
+    private getUrl(projectId: string) {
         const baseUrl = this.config.baseUrl || 'http://localhost:3000';
-        return baseUrl.replace(/^http/, 'ws') + '/v1/realtime';
+        let url = baseUrl.replace(/^http/, 'ws') + `/v1/realtime/${encodeURIComponent(projectId)}`;
+
+        // Append Auth params for standard browser support (which doesn't support headers)
+        const params = new URLSearchParams();
+        if (this.config.apiKey) {
+            params.append('x-api-key', this.config.apiKey);
+        }
+
+        const token = this.auth.getSession()?.access_token;
+        if (token) {
+            params.append('token', token);
+        }
+
+        const queryString = params.toString();
+        if (queryString) {
+            url += `?${queryString}`;
+        }
+
+        return url;
     }
 
     connect() {
         if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
+        this.manualDisconnect = false;
 
-        const url = this.getUrl();
+        const projectId = this.getProjectId();
+        if (!projectId) {
+            console.error('CoreBase Realtime error: no signed-in session — realtime requires a project end-user session (client.auth.signIn/signUp) before connecting.');
+            return;
+        }
+
+        const url = this.getUrl(projectId);
         const headers: any = {
             'x-api-key': this.config.apiKey
         };
@@ -47,9 +99,11 @@ export class RealtimeClient {
         }
 
         try {
+            // Try to pass headers (Node.js / React Native)
             // @ts-ignore
-            this.ws = new WebSocket(url, [], { headers });
+            this.ws = new WebSocket(url, undefined, { headers });
         } catch (e) {
+            // Fallback for standard browsers
             this.ws = new WebSocket(url);
         }
 
@@ -71,7 +125,9 @@ export class RealtimeClient {
 
         this.ws.onclose = () => {
             this.isConnected = false;
-            this.scheduleReconnect();
+            if (!this.manualDisconnect) {
+                this.scheduleReconnect();
+            }
         };
 
         this.ws.onerror = (e) => {
@@ -80,6 +136,7 @@ export class RealtimeClient {
     }
 
     disconnect() {
+        this.manualDisconnect = true;
         if (this.ws) {
             this.ws.close();
             this.ws = null;
